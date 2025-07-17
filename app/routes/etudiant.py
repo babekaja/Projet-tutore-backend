@@ -99,3 +99,22 @@ def delete_etudiant(etudiant_id: str, db: Session = Depends(get_db)):
     if not etudiant:
         raise HTTPException(status_code=404, detail="Étudiant non trouvé")
     return {"message": "Étudiant supprimé avec succès"}
+
+
+
+
+@router.get("/verifier-acces/")
+def verifier_acces(matricule: str, salle_id: int, db: Session = Depends(get_db)):
+    # Cherche l'étudiant par matricule
+    etudiant = db.query(models.Etudiant).filter(models.Etudiant.matricule == matricule).first()
+    if not etudiant:
+        raise HTTPException(status_code=404, detail="Étudiant introuvable")
+
+    # Vérifie s'il existe une autorisation pour cette salle et cet étudiant
+    autorisation = db.query(models.Autorisation).filter(
+        models.Autorisation.etudiant_id == etudiant.id,
+        models.Autorisation.salle_id == salle_id
+    ).first()
+
+    return {"autorise": autorisation is not None}
+
