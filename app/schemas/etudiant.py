@@ -5,7 +5,7 @@ class EtudiantBase(BaseModel):
     matricule: str
     nom: str
     prenom: str | None = None
-    email: EmailStr
+    email: str
     uid_firebase: str
 
 class EtudiantCreate(EtudiantBase):
