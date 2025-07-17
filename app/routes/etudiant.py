@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 import httpx
+from .. import models, schemas
 
-from .. import models, schemas, crud
+
 from app import database
+from .. import crud, schemas
 
 router = APIRouter(
     prefix="/etudiants",
-    tags=["Etudiants"]
+    tags=["Étudiants"]
 )
 
 def get_db():
@@ -18,10 +22,19 @@ def get_db():
         db.close()
 
 
+
+
+router = APIRouter(
+    prefix="/etudiants",
+    tags=["Etudiants"]
+)
+
+
 @router.post("/create-from-matricule")
 def create_etudiant_from_matricule(matricule: str, db: Session = Depends(get_db)):
     url = f"https://akhademie.ucbukavu.ac.cd/api/v1/school-students/read-by-matricule?matricule={matricule}"
 
+    # Appel API externe
     try:
         response = httpx.get(url, timeout=10)
         response.raise_for_status()
@@ -29,8 +42,7 @@ def create_etudiant_from_matricule(matricule: str, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
                             detail="Impossible de joindre le serveur Akhademie")
     except httpx.HTTPStatusError as exc:
-        raise HTTPException(status_code=exc.response.status_code,
-                            detail="Erreur côté serveur Akhademie")
+        raise HTTPException(status_code=exc.response.status_code, detail="Erreur côté serveur Akhademie")
 
     data = response.json()
 
@@ -39,20 +51,18 @@ def create_etudiant_from_matricule(matricule: str, db: Session = Depends(get_db)
 
     etudiant_data = data["data"]
 
+    # Vérifie si l’étudiant existe déjà dans ta base
     existing = db.query(models.Etudiant).filter(models.Etudiant.matricule == matricule).first()
     if existing:
         raise HTTPException(status_code=400, detail="Étudiant déjà enregistré localement.")
 
-    # Nettoyage de l’email
-    raw_email = etudiant_data.get("email") or f"{matricule.replace('/', '').replace('.', '')}@ucbukavu.ac.cd"
-    email_sans_espace = raw_email.replace(" ", "")
-
+    # Créer un nouvel étudiant localement
     new_etudiant = models.Etudiant(
         matricule=etudiant_data["matricule"],
-        nom=etudiant_data["name"],
+        nom=etudiant_data["name"],  # ou etudiant_data["lastname"] selon ton besoin
         prenom=etudiant_data["firstname"],
-        email=email_sans_espace,
-        uid_firebase=f"AKH-{etudiant_data['id']}",
+        email=etudiant_data.get("email") or f"{matricule.replace('/', '').replace('.', '')}@ucbukavu.ac.cd",
+        uid_firebase=f"AKH-{etudiant_data['id']}",  # ou un autre système si nécessaire
         date_creation=etudiant_data.get("createdAt")
     )
 
@@ -62,7 +72,13 @@ def create_etudiant_from_matricule(matricule: str, db: Session = Depends(get_db)
 
     return {
         "message": "Étudiant ajouté avec succès",
-        "etudiant": schemas.EtudiantResponse.model_validate(new_etudiant)
+        "etudiant": {
+            "id": new_etudiant.id,
+            "matricule": new_etudiant.matricule,
+            "nom": new_etudiant.nom,
+            "prenom": new_etudiant.prenom,
+            "email": new_etudiant.email
+        }
     }
 
 
